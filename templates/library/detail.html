@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Detalle del libro{% endblock %}
+{% block content %}
+<section class="book-detail">
+  <div class="cover-detail">
+    <img src="/books/{{ book.id }}/cover" alt="Portada">
+  </div>
+  <div class="detail-content">
+    <h1>{{ book.title_ai|default:book.title_user }}</h1>
+    <p class="author">{{ book.author_ai|default:book.author_user }}</p>
+    <p><strong>Estado:</strong> {{ book.status }}</p>
+    <p><strong>Género:</strong> {{ book.genre|default:"(pendiente)" }}</p>
+    <p><strong>Idioma:</strong> {{ book.language|default:"(pendiente)" }}</p>
+    <p><strong>Tags:</strong>
+      {% for tag in book.tags_json %}
+        <span class="tag">{{ tag }}</span>
+      {% empty %}
+        -
+      {% endfor %}
+    </p>
+    <p><strong>Sinopsis:</strong> {{ book.summary|default:"(pendiente)" }}</p>
+    {% if book.status == "ready" %}
+      <a class="download" href="/books/{{ book.id }}/download">Descargar</a>
+    {% else %}
+      <p>Este libro aún no está listo para descarga.</p>
+    {% endif %}
+    {% if book.scan_report %}
+      <p><strong>Reporte:</strong> {{ book.scan_report }}</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

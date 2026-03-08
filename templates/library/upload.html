@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Subir libro{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>Subir Nuevo Libro</h1>
+  <p>Se validará antivirus, tipo de archivo e integridad antes de publicarse.</p>
+</section>
+
+<form method="post" enctype="multipart/form-data" class="upload-form">
+  {% csrf_token %}
+  <label>Título</label>
+  {{ form.title }}
+
+  <label>Autor</label>
+  {{ form.author }}
+
+  <label>Archivo (.pdf o .epub)</label>
+  {{ form.file }}
+
+  <button type="submit">Upload</button>
+</form>
+{% endblock %}

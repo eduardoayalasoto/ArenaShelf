@@ -1,0 +1,29 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Biblioteca{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'library/styles.css' %}">
+</head>
+<body>
+  <header class="site-header">
+    <a href="/" class="logo">Arena Shelf</a>
+    <nav class="nav">
+      <a href="/">Catálogo</a>
+      <a href="/upload">Subir libro</a>
+    </nav>
+  </header>
+  <main class="container">
+    {% if messages %}
+      <section class="messages">
+        {% for message in messages %}
+          <p class="message">{{ message }}</p>
+        {% endfor %}
+      </section>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
