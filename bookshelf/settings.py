@@ -5,7 +5,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-secret-key-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1"
+
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+
+_csrf_origins_env = os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "")
+if _csrf_origins_env.strip():
+    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in _csrf_origins_env.split(",") if origin.strip()]
+else:
+    CSRF_TRUSTED_ORIGINS = [
+        f"https://{host.strip()}"
+        for host in ALLOWED_HOSTS
+        if host.strip() and host.strip() != "*"
+    ]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
