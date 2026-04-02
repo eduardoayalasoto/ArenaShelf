@@ -17,6 +17,31 @@
   <label>Archivo (.pdf o .epub)</label>
   {{ form.file }}
 
-  <button type="submit">Upload</button>
+  <button type="submit">Subir</button>
 </form>
+
+{% if uploaded %}
+<div id="upload-modal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-icon">✓</div>
+    <h2>¡Libro subido correctamente!</h2>
+    <p>Será procesado en segundo plano. Redirigiendo al catálogo…</p>
+    <div class="modal-countdown"><span id="countdown">2</span>s</div>
+  </div>
+</div>
+<script>
+  (function () {
+    var seconds = 2;
+    var el = document.getElementById('countdown');
+    var interval = setInterval(function () {
+      seconds -= 1;
+      el.textContent = seconds;
+      if (seconds <= 0) {
+        clearInterval(interval);
+        window.location.href = '/';
+      }
+    }, 1000);
+  })();
+</script>
+{% endif %}
 {% endblock %}
