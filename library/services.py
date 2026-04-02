@@ -206,6 +206,51 @@ def enrich_with_ai(text: str, title_user: str, author_user: str) -> dict[str, An
         raise RuntimeError(f"Error en API de IA: {exc}") from exc
 
 
+def fetch_book_metadata_from_google(title: str, author: str) -> dict[str, Any] | None:
+    """Query Google Books API for canonical title, author and cover image bytes."""
+    try:
+        from urllib.request import Request, urlopen
+        from urllib.parse import urlencode
+
+        params = urlencode({"q": f"intitle:{title} inauthor:{author}", "maxResults": 1,
+                            "fields": "items(volumeInfo/title,volumeInfo/authors,volumeInfo/imageLinks)"})
+        req = Request(
+            f"https://www.googleapis.com/books/v1/volumes?{params}",
+            headers={"User-Agent": "ArenaShelf/1.0"},
+        )
+        import json as _json
+        with urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read())
+
+        items = data.get("items")
+        if not items:
+            return None
+
+        info = items[0].get("volumeInfo", {})
+        real_title = info.get("title", "").strip()
+        authors = info.get("authors") or []
+        real_author = ", ".join(authors).strip()
+
+        image_links = info.get("imageLinks", {})
+        cover_url = image_links.get("thumbnail") or image_links.get("smallThumbnail")
+        cover_bytes = None
+        if cover_url:
+            cover_url = cover_url.replace("zoom=1", "zoom=0").replace("http://", "https://")
+            try:
+                cover_req = Request(cover_url, headers={"User-Agent": "ArenaShelf/1.0"})
+                with urlopen(cover_req, timeout=10) as cover_resp:
+                    cover_bytes = cover_resp.read()
+            except Exception:
+                cover_bytes = None
+
+        if not real_title and not real_author:
+            return None
+
+        return {"title": real_title, "author": real_author, "cover_bytes": cover_bytes}
+    except Exception:
+        return None
+
+
 def slug_piece(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
     normalized = normalized.lower().strip()
@@ -301,8 +346,15 @@ def process_book(book_id: int) -> None:
             )
             return
 
+        google_meta = fetch_book_metadata_from_google(book.title_ai, book.author_ai)
+        if google_meta:
+            book.title_ai = google_meta["title"] or book.title_ai
+            book.author_ai = google_meta["author"] or book.author_ai
+            book.cover_blob = google_meta["cover_bytes"] or generate_cover_svg(book.title_ai, book.author_ai)
+        else:
+            book.cover_blob = generate_cover_svg(book.title_ai, book.author_ai)
+
         book.normalized_filename = normalized_download_filename(book.author_ai, book.title_ai, ext)
-        book.cover_blob = generate_cover_svg(book.title_ai, book.author_ai)
         book.status = Book.Status.READY
         book.save(
             update_fields=[
