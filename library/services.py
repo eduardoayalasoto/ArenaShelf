@@ -165,19 +165,25 @@ def validate_ai_payload(payload: dict[str, Any], title_user: str, author_user: s
 
 
 def enrich_with_ai(text: str, title_user: str, author_user: str) -> dict[str, Any]:
-    if not settings.ANTHROPIC_API_KEY:
+    if not settings.GEMINI_API_KEY:
         return fallback_ai_metadata(title_user, author_user)
 
     try:
-        import anthropic
+        import google.generativeai as genai
 
-        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-        system_prompt = (
-            "Eres un analista editorial. Analiza el fragmento del libro y devuelve SOLO un objeto JSON "
-            "con exactamente estas llaves: title_ai, author_ai, genre, language, tags, summary. "
-            "tags debe ser un array con al menos 4 elementos en minúsculas. "
-            "language debe ser el código ISO 639-1 (ej: 'es', 'en', 'fr'). "
-            "No incluyas ningún texto fuera del JSON."
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        model = genai.GenerativeModel(
+            model_name=settings.GEMINI_MODEL,
+            generation_config=genai.GenerationConfig(
+                response_mime_type="application/json",
+                temperature=0.1,
+            ),
+            system_instruction=(
+                "Eres un analista editorial. Analiza el fragmento del libro y devuelve SOLO un objeto JSON "
+                "con exactamente estas llaves: title_ai, author_ai, genre, language, tags, summary. "
+                "tags debe ser un array con al menos 4 elementos en minúsculas. "
+                "language debe ser el código ISO 639-1 (ej: 'es', 'en', 'fr')."
+            ),
         )
 
         snippet = text[:6000] if text else ""
@@ -190,16 +196,8 @@ def enrich_with_ai(text: str, title_user: str, author_user: str) -> dict[str, An
             ensure_ascii=False,
         )
 
-        response = client.messages.create(
-            model=settings.ANTHROPIC_MODEL,
-            max_tokens=1024,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_content}],
-        )
-
-        content = response.content[0].text if response.content else "{}"
-        # Strip markdown code fences if Claude wraps the JSON
-        content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip())
+        response = model.generate_content(user_content)
+        content = response.text or "{}"
         payload = json.loads(content)
         return validate_ai_payload(payload, title_user, author_user)
     except Exception:
