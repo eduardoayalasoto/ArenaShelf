@@ -91,11 +91,22 @@ class DownloadView(View):
         return resp
 
 
+def _cover_content_type(data: bytes) -> str:
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:4] == b"\x89PNG":
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/svg+xml"
+
+
 class CoverView(View):
     def get(self, request, book_id: int):
         book = get_object_or_404(Book, id=book_id)
         if book.cover_blob:
-            return HttpResponse(bytes(book.cover_blob), content_type="image/svg+xml")
+            data = bytes(book.cover_blob)
+            return HttpResponse(data, content_type=_cover_content_type(data))
         svg = (
             "<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='900'>"
             "<rect width='1200' height='900' fill='#334155'/></svg>"
