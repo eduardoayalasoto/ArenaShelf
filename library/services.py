@@ -166,7 +166,7 @@ def validate_ai_payload(payload: dict[str, Any], title_user: str, author_user: s
 
 def enrich_with_ai(text: str, title_user: str, author_user: str) -> dict[str, Any]:
     if not settings.GEMINI_API_KEY:
-        return fallback_ai_metadata(title_user, author_user)
+        raise RuntimeError("GEMINI_API_KEY no configurada")
 
     try:
         import google.generativeai as genai
@@ -200,8 +200,10 @@ def enrich_with_ai(text: str, title_user: str, author_user: str) -> dict[str, An
         content = response.text or "{}"
         payload = json.loads(content)
         return validate_ai_payload(payload, title_user, author_user)
-    except Exception:
-        return fallback_ai_metadata(title_user, author_user)
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError(f"Error en API de IA: {exc}") from exc
 
 
 def slug_piece(value: str) -> str:
@@ -261,7 +263,11 @@ def process_book(book_id: int) -> None:
         book.save(update_fields=["status", "scan_report", "extension", "mime_type", "file_size", "sha256", "updated_at"])
 
         text = extract_text_for_ai(ext, data)
-        ai = enrich_with_ai(text, book.title_user, book.author_user)
+        try:
+            ai = enrich_with_ai(text, book.title_user, book.author_user)
+        except RuntimeError as enrichment_error:
+            ai = fallback_ai_metadata(book.title_user, book.author_user)
+            book.scan_report = f"{book.scan_report}; Metadatos IA: {enrichment_error}"
 
         book.status = Book.Status.ENRICHED
         book.title_ai = ai["title_ai"]
