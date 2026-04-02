@@ -68,8 +68,7 @@ class UploadView(View):
             status=Book.Status.PENDING,
         )
         ProcessingJob.objects.create(book=book, status=ProcessingJob.JobStatus.PENDING)
-        messages.success(request, "Libro subido. El procesamiento se ejecuta en segundo plano.")
-        return redirect("book-detail", book_id=book.id)
+        return render(request, self.template_name, {"form": BookUploadForm(), "uploaded": True})
 
 
 class DetailView(View):

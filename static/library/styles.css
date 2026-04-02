@@ -373,6 +373,57 @@ body {
   border-bottom: 1px solid var(--gray);
 }
 
+/* ── Upload modal ─────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-box {
+  background: var(--white);
+  border: var(--border);
+  border-top: 6px solid var(--blue);
+  padding: 3rem 2.5rem;
+  max-width: 420px;
+  width: 90%;
+  text-align: center;
+}
+
+.modal-icon {
+  font-size: 3rem;
+  color: var(--blue);
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 1rem;
+}
+
+.modal-box h2 {
+  font-family: var(--font-heading);
+  font-size: 1.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.75rem;
+  color: var(--black);
+}
+
+.modal-box p {
+  font-size: 0.95rem;
+  color: var(--muted);
+  margin-bottom: 1.25rem;
+}
+
+.modal-countdown {
+  font-family: var(--font-heading);
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--blue);
+}
+
 /* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 700px) {
   .book-detail {
