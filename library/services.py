@@ -165,41 +165,39 @@ def validate_ai_payload(payload: dict[str, Any], title_user: str, author_user: s
 
 
 def enrich_with_ai(text: str, title_user: str, author_user: str) -> dict[str, Any]:
-    if not settings.OPENAI_API_KEY:
+    if not settings.GEMINI_API_KEY:
         return fallback_ai_metadata(title_user, author_user)
 
     try:
-        from openai import OpenAI
+        import google.generativeai as genai
 
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        prompt = (
-            "Eres un analista editorial. Devuelve solo JSON con llaves: "
-            "title_ai, author_ai, genre, language, tags, summary. "
-            "tags debe contener al menos 4 elementos."
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        model = genai.GenerativeModel(
+            model_name=settings.GEMINI_MODEL,
+            generation_config=genai.GenerationConfig(
+                response_mime_type="application/json",
+                temperature=0.1,
+            ),
+            system_instruction=(
+                "Eres un analista editorial. Analiza el fragmento del libro y devuelve SOLO un objeto JSON "
+                "con exactamente estas llaves: title_ai, author_ai, genre, language, tags, summary. "
+                "tags debe ser un array con al menos 4 elementos en minúsculas. "
+                "language debe ser el código ISO 639-1 (ej: 'es', 'en', 'fr')."
+            ),
         )
 
         snippet = text[:6000] if text else ""
-        response = client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": prompt},
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "title_user": title_user,
-                            "author_user": author_user,
-                            "book_excerpt": snippet,
-                        },
-                        ensure_ascii=False,
-                    ),
-                },
-            ],
-            temperature=0.1,
+        user_content = json.dumps(
+            {
+                "title_user": title_user,
+                "author_user": author_user,
+                "book_excerpt": snippet,
+            },
+            ensure_ascii=False,
         )
 
-        content = response.choices[0].message.content or "{}"
+        response = model.generate_content(user_content)
+        content = response.text or "{}"
         payload = json.loads(content)
         return validate_ai_payload(payload, title_user, author_user)
     except Exception:
