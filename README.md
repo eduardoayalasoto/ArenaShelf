@@ -3,7 +3,7 @@
 Aplicación web en Django para publicar libros digitales (PDF/EPUB) con:
 - Catálogo visual en tarjetas 4:3.
 - Upload de archivo + título + autor.
-- Validación de tipo/estructura y antivirus (ClamAV).
+- Validación de tipo/estructura y antivirus (ClamAV)
 - Guardado del archivo como BLOB en SQLite.
 - Enriquecimiento de metadata con IA (OpenAI).
 - Descarga con nombre normalizado `autor-libro.ext`.
