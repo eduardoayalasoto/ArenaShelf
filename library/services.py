@@ -313,6 +313,7 @@ def process_book(book_id: int) -> None:
                 "language",
                 "tags_json",
                 "summary",
+                "scan_report",
                 "normalized_filename",
                 "cover_blob",
                 "updated_at",
