@@ -100,8 +100,8 @@ MAX_UPLOAD_SIZE = 50 * 1024 * 1024
 ALLOWED_BOOK_EXTENSIONS = {".pdf", ".epub"}
 BLOCKED_EXTENSIONS = {".zip"}
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
 
 CLAMD_HOST = os.getenv("CLAMD_HOST", "127.0.0.1")
 CLAMD_PORT = int(os.getenv("CLAMD_PORT", "3310"))
