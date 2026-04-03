@@ -216,7 +216,7 @@ def fetch_book_metadata_from_google(title: str, author: str) -> dict[str, Any] |
         from urllib.parse import urlencode
 
         params = urlencode({"q": f"intitle:{title} inauthor:{author}", "maxResults": 1,
-                            "fields": "items(volumeInfo/title,volumeInfo/authors,volumeInfo/imageLinks)"})
+                            "fields": "items(volumeInfo/title,volumeInfo/subtitle,volumeInfo/authors,volumeInfo/imageLinks)"})
         req = Request(
             f"https://www.googleapis.com/books/v1/volumes?{params}",
             headers={"User-Agent": "ArenaShelf/1.0"},
@@ -231,6 +231,9 @@ def fetch_book_metadata_from_google(title: str, author: str) -> dict[str, Any] |
 
         info = items[0].get("volumeInfo", {})
         real_title = info.get("title", "").strip()
+        subtitle = info.get("subtitle", "").strip()
+        if subtitle and subtitle.lower() not in real_title.lower():
+            real_title = f"{real_title}: {subtitle}"
         authors = info.get("authors") or []
         real_author = ", ".join(authors).strip()
 
@@ -238,7 +241,7 @@ def fetch_book_metadata_from_google(title: str, author: str) -> dict[str, Any] |
         cover_url = image_links.get("thumbnail") or image_links.get("smallThumbnail") or ""
         if cover_url:
             cover_url = (cover_url
-                         .replace("zoom=1", "zoom=0")
+                         .replace("zoom=1", "zoom=6")
                          .replace("&edge=curl", "")
                          .replace("http://", "https://"))
 
