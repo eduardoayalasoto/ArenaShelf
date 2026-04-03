@@ -263,6 +263,18 @@ def normalized_download_filename(author: str, title: str, ext: str) -> str:
     return f"{slug_piece(author)}-{slug_piece(title)}{ext}"
 
 
+def download_image(url: str) -> bytes | None:
+    """Download an image from a URL and return its bytes, or None on failure."""
+    try:
+        from urllib.request import Request, urlopen
+
+        req = Request(url, headers={"User-Agent": "ArenaShelf/1.0"})
+        with urlopen(req, timeout=10) as resp:
+            return resp.read()
+    except Exception:
+        return None
+
+
 def generate_cover_svg(title: str, author: str) -> bytes:
     title_safe = html.escape(title[:90] or "Untitled")
     author_safe = html.escape(author[:90] or "Unknown Author")
@@ -349,8 +361,15 @@ def process_book(book_id: int) -> None:
         if google_meta:
             book.title_ai = google_meta["title"] or book.title_ai
             book.author_ai = google_meta["author"] or book.author_ai
-            book.cover_url = google_meta["cover_url"]
-        book.cover_blob = generate_cover_svg(book.title_ai, book.author_ai)
+            if google_meta.get("cover_url"):
+                img_data = download_image(google_meta["cover_url"])
+                if img_data:
+                    book.cover_blob = img_data
+                    book.cover_url = ""
+                else:
+                    book.cover_url = google_meta["cover_url"]
+        if not book.cover_blob:
+            book.cover_blob = generate_cover_svg(book.title_ai, book.author_ai)
 
         book.normalized_filename = normalized_download_filename(book.author_ai, book.title_ai, ext)
         book.status = Book.Status.READY
