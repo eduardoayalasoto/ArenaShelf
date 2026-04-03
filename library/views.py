@@ -59,9 +59,20 @@ class UploadView(View):
 
         f = form.cleaned_data["file"]
         data = f.read()
+
+        # Parse author and title from filename: "Autor - Titulo.ext"
+        name_without_ext = f.name.rsplit(".", 1)[0] if "." in f.name else f.name
+        if " - " in name_without_ext:
+            raw_author, raw_title = name_without_ext.split(" - ", 1)
+            title_user = raw_title.strip()
+            author_user = raw_author.strip()
+        else:
+            title_user = name_without_ext.strip()
+            author_user = "Desconocido"
+
         book = Book.objects.create(
-            title_user=form.cleaned_data["title"],
-            author_user=form.cleaned_data["author"],
+            title_user=title_user,
+            author_user=author_user,
             original_filename=f.name,
             file_blob=data,
             file_size=len(data),

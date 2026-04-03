@@ -12,7 +12,7 @@
     </div>
     {% if book.status == "ready" %}
       <a href="/books/{{ book.id }}/download"
-        class="block text-center px-4 py-3 bg-slate-900 hover:bg-slate-700 text-white font-semibold rounded-xl transition-colors text-sm tracking-wide">
+        class="block text-center px-4 py-3 bg-brand-navy hover:bg-brand-dark text-white font-semibold rounded-xl transition-colors text-sm tracking-wide">
         Descargar
       </a>
     {% else %}
@@ -51,7 +51,7 @@
     <div class="flex flex-wrap gap-2 mb-8">
       {% for tag in book.tags_json %}
         <a href="/?tag={{ tag }}"
-          class="px-3 py-1.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 rounded-full text-xs font-medium whitespace-nowrap transition-colors border border-slate-200 hover:border-indigo-200">
+          class="px-3 py-1.5 bg-slate-100 hover:bg-[#f5eef2] hover:text-brand-magenta text-slate-600 rounded-full text-xs font-medium whitespace-nowrap transition-colors border border-slate-200 hover:border-[#d4a0bf]">
           {{ tag }}
         </a>
       {% endfor %}

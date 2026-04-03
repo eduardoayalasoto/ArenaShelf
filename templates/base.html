@@ -5,6 +5,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}ArenaShelf{% endblock %}</title>
+  <script>
+    tailwind = { config: { theme: { extend: { colors: {
+      'brand-navy':    '#242d51',
+      'brand-magenta': '#601b4d',
+      'brand-dark':    '#0f1a3b',
+      'brand-gray':    '#acacac',
+    }}}}}
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
@@ -14,22 +22,22 @@
     .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   </style>
 </head>
-<body class="bg-stone-50 text-slate-900 min-h-screen">
-  <header class="bg-slate-900 border-b border-slate-800">
+<body class="bg-white text-slate-900 min-h-screen">
+  <header class="bg-brand-dark border-b border-brand-navy">
     <div class="max-w-6xl mx-auto px-6 flex items-center justify-between h-16">
       <a href="/" class="font-display text-xl font-bold text-white tracking-wide">
-        Arena<span class="text-amber-400">Shelf</span>
+        arena<span class="text-brand-magenta">ANALYTICS</span>
       </a>
       <nav class="flex items-center gap-1">
-        <a href="/" class="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">Catálogo</a>
-        <a href="/upload" class="ml-2 px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors">Subir libro</a>
+        <a href="/" class="px-4 py-2 text-sm font-medium text-brand-gray hover:text-white hover:bg-brand-navy rounded-lg transition-colors">Catálogo</a>
+        <a href="/upload" class="ml-2 px-4 py-2 text-sm font-semibold bg-brand-magenta hover:bg-[#4a1339] text-white rounded-lg transition-colors">Subir libro</a>
       </nav>
     </div>
   </header>
   <main class="max-w-6xl mx-auto px-6 py-10">
     {% if messages %}
       {% for message in messages %}
-        <div class="mb-6 p-4 bg-indigo-50 border border-indigo-200 text-indigo-800 text-sm rounded-xl">{{ message }}</div>
+        <div class="mb-6 p-4 bg-[#f5eef2] border border-[#d4a0bf] text-brand-magenta text-sm rounded-xl">{{ message }}</div>
       {% endfor %}
     {% endif %}
     {% block content %}{% endblock %}
