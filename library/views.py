@@ -19,7 +19,9 @@ class IndexView(View):
         tag = request.GET.get("tag", "").strip().lower()
 
         if q:
-            books = books.filter(Q(title_ai__icontains=q) | Q(author_ai__icontains=q))
+            books = books.filter(
+                Q(title_ai__icontains=q) | Q(author_ai__icontains=q) | Q(summary__icontains=q)
+            )
         if genre:
             books = books.filter(genre__iexact=genre)
         if language:
@@ -28,8 +30,16 @@ class IndexView(View):
         if tag:
             books = [b for b in books if tag in [t.lower() for t in b.tags_json]]
 
-        genres = Book.objects.exclude(genre="").values_list("genre", flat=True).distinct()
-        languages = Book.objects.exclude(language="").values_list("language", flat=True).distinct()
+        genres = sorted({
+            g.strip().title()
+            for g in Book.objects.exclude(genre="").values_list("genre", flat=True)
+            if g.strip()
+        })
+        languages = sorted({
+            l.strip().title()
+            for l in Book.objects.exclude(language="").values_list("language", flat=True)
+            if l.strip()
+        })
 
         return render(
             request,
