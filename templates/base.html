@@ -5,15 +5,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}ArenaShelf{% endblock %}</title>
-  <script>
-    tailwind = { config: { theme: { extend: { colors: {
-      'brand-navy':    '#242d51',
-      'brand-magenta': '#601b4d',
-      'brand-dark':    '#0f1a3b',
-      'brand-gray':    '#acacac',
-    }}}}}
-  </script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'brand-navy':    '#242d51',
+            'brand-magenta': '#601b4d',
+            'brand-dark':    '#0f1a3b',
+            'brand-gray':    '#acacac',
+          }
+        }
+      }
+    }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
   <style>
