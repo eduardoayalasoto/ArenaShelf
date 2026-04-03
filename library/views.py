@@ -104,6 +104,9 @@ def _cover_content_type(data: bytes) -> str:
 class CoverView(View):
     def get(self, request, book_id: int):
         book = get_object_or_404(Book, id=book_id)
+        if book.cover_url:
+            from django.shortcuts import redirect as _redirect
+            return _redirect(book.cover_url)
         if book.cover_blob:
             data = bytes(book.cover_blob)
             return HttpResponse(data, content_type=_cover_content_type(data))

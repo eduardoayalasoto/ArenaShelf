@@ -28,6 +28,7 @@ class Book(models.Model):
     file_blob = models.BinaryField()
     file_size = models.PositiveIntegerField(default=0)
     cover_blob = models.BinaryField(null=True, blank=True)
+    cover_url = models.URLField(max_length=500, blank=True)
 
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     scan_report = models.TextField(blank=True)

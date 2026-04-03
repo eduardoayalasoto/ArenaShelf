@@ -1,32 +1,47 @@
 {% extends "base.html" %}
-{% block title %}Subir libro{% endblock %}
+{% block title %}Subir libro · ArenaShelf{% endblock %}
 {% block content %}
-<section class="hero">
-  <h1>Subir Nuevo Libro</h1>
-  <p>Se validará antivirus, tipo de archivo e integridad antes de publicarse.</p>
-</section>
 
-<form method="post" enctype="multipart/form-data" class="upload-form">
-  {% csrf_token %}
-  <label>Título</label>
-  {{ form.title }}
+<div class="max-w-lg mx-auto">
+  <div class="mb-8">
+    <h1 class="font-display text-3xl font-bold text-slate-900 mb-1">Subir libro</h1>
+    <p class="text-slate-500 text-sm">Se validará el archivo antes de publicarse en el catálogo.</p>
+  </div>
 
-  <label>Autor</label>
-  {{ form.author }}
+  <form method="post" enctype="multipart/form-data" class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+    {% csrf_token %}
+    <div class="p-6 space-y-5">
 
-  <label>Archivo (.pdf o .epub)</label>
-  {{ form.file }}
+      <div>
+        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">Título</label>
+        {{ form.title }}
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">Autor</label>
+        {{ form.author }}
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">Archivo (.pdf o .epub)</label>
+        {{ form.file }}
+      </div>
 
-  <button type="submit">Subir</button>
-</form>
+    </div>
+    <div class="px-6 pb-6">
+      <button type="submit"
+        class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-colors text-sm tracking-wide">
+        Subir libro
+      </button>
+    </div>
+  </form>
+</div>
 
 {% if uploaded %}
-<div id="upload-modal" class="modal-overlay">
-  <div class="modal-box">
-    <div class="modal-icon">✓</div>
-    <h2>¡Libro subido correctamente!</h2>
-    <p>Será procesado en segundo plano. Redirigiendo al catálogo…</p>
-    <div class="modal-countdown"><span id="countdown">2</span>s</div>
+<div id="upload-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+  <div class="bg-white rounded-2xl shadow-2xl p-10 max-w-sm w-full mx-4 text-center">
+    <div class="text-5xl mb-4">✓</div>
+    <h2 class="font-display text-2xl font-bold text-slate-900 mb-2">¡Libro subido!</h2>
+    <p class="text-slate-500 text-sm mb-6">Se procesará en segundo plano. Redirigiendo al catálogo…</p>
+    <div class="text-4xl font-bold text-indigo-600"><span id="countdown">2</span>s</div>
   </div>
 </div>
 <script>
@@ -36,12 +51,10 @@
     var interval = setInterval(function () {
       seconds -= 1;
       el.textContent = seconds;
-      if (seconds <= 0) {
-        clearInterval(interval);
-        window.location.href = '/';
-      }
+      if (seconds <= 0) { clearInterval(interval); window.location.href = '/'; }
     }, 1000);
   })();
 </script>
 {% endif %}
+
 {% endblock %}

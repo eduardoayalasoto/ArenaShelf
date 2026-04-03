@@ -210,7 +210,7 @@ def enrich_with_ai(text: str, title_user: str, author_user: str) -> dict[str, An
 
 
 def fetch_book_metadata_from_google(title: str, author: str) -> dict[str, Any] | None:
-    """Query Google Books API for canonical title, author and cover image bytes."""
+    """Query Google Books API for canonical title, author and cover URL."""
     try:
         from urllib.request import Request, urlopen
         from urllib.parse import urlencode
@@ -235,27 +235,17 @@ def fetch_book_metadata_from_google(title: str, author: str) -> dict[str, Any] |
         real_author = ", ".join(authors).strip()
 
         image_links = info.get("imageLinks", {})
-        cover_url = image_links.get("thumbnail") or image_links.get("smallThumbnail")
-        cover_bytes = None
+        cover_url = image_links.get("thumbnail") or image_links.get("smallThumbnail") or ""
         if cover_url:
             cover_url = (cover_url
                          .replace("zoom=1", "zoom=0")
                          .replace("&edge=curl", "")
                          .replace("http://", "https://"))
-            try:
-                cover_req = Request(cover_url, headers={
-                    "User-Agent": "Mozilla/5.0 (compatible; ArenaShelf/1.0)",
-                    "Accept": "image/jpeg,image/png,image/*",
-                })
-                with urlopen(cover_req, timeout=10) as cover_resp:
-                    cover_bytes = cover_resp.read()
-            except Exception:
-                cover_bytes = None
 
         if not real_title and not real_author:
             return None
 
-        return {"title": real_title, "author": real_author, "cover_bytes": cover_bytes}
+        return {"title": real_title, "author": real_author, "cover_url": cover_url}
     except Exception:
         return None
 
@@ -359,9 +349,8 @@ def process_book(book_id: int) -> None:
         if google_meta:
             book.title_ai = google_meta["title"] or book.title_ai
             book.author_ai = google_meta["author"] or book.author_ai
-            book.cover_blob = google_meta["cover_bytes"] or generate_cover_svg(book.title_ai, book.author_ai)
-        else:
-            book.cover_blob = generate_cover_svg(book.title_ai, book.author_ai)
+            book.cover_url = google_meta["cover_url"]
+        book.cover_blob = generate_cover_svg(book.title_ai, book.author_ai)
 
         book.normalized_filename = normalized_download_filename(book.author_ai, book.title_ai, ext)
         book.status = Book.Status.READY
@@ -377,6 +366,7 @@ def process_book(book_id: int) -> None:
                 "scan_report",
                 "normalized_filename",
                 "cover_blob",
+                "cover_url",
                 "updated_at",
             ]
         )
