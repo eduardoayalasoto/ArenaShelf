@@ -114,15 +114,23 @@ def _cover_content_type(data: bytes) -> str:
 
 class CoverView(View):
     def get(self, request, book_id: int):
+        from .services import generate_cover_svg
+
         book = get_object_or_404(Book, id=book_id)
         if book.cover_url:
-            from django.shortcuts import redirect as _redirect
-            return _redirect(book.cover_url)
+            return redirect(book.cover_url)
         if book.cover_blob:
             data = bytes(book.cover_blob)
-            return HttpResponse(data, content_type=_cover_content_type(data))
-        svg = (
-            "<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='900'>"
-            "<rect width='1200' height='900' fill='#334155'/></svg>"
+            ct = _cover_content_type(data)
+            # SVG covers may be old landscape format — regenerate as portrait
+            if ct == "image/svg+xml":
+                data = generate_cover_svg(
+                    book.title_ai or book.title_user,
+                    book.author_ai or book.author_user,
+                )
+            return HttpResponse(data, content_type=ct)
+        data = generate_cover_svg(
+            book.title_ai or book.title_user,
+            book.author_ai or book.author_user,
         )
-        return HttpResponse(svg, content_type="image/svg+xml")
+        return HttpResponse(data, content_type="image/svg+xml")

@@ -263,6 +263,32 @@ def normalized_download_filename(author: str, title: str, ext: str) -> str:
     return f"{slug_piece(author)}-{slug_piece(title)}{ext}"
 
 
+def fetch_cover_from_openlibrary(title: str, author: str) -> str | None:
+    """Query Open Library search API for a book cover URL (no API key required)."""
+    try:
+        from urllib.request import Request, urlopen
+        from urllib.parse import urlencode
+        import json as _json
+
+        params = urlencode({"title": title, "author": author, "limit": 1, "fields": "cover_i"})
+        req = Request(
+            f"https://openlibrary.org/search.json?{params}",
+            headers={"User-Agent": "ArenaShelf/1.0"},
+        )
+        with urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read())
+
+        docs = data.get("docs", [])
+        if not docs:
+            return None
+        cover_i = docs[0].get("cover_i")
+        if not cover_i:
+            return None
+        return f"https://covers.openlibrary.org/b/id/{cover_i}-L.jpg"
+    except Exception:
+        return None
+
+
 def download_image(url: str) -> bytes | None:
     """Download an image from a URL and return its bytes, or None on failure."""
     try:
@@ -276,9 +302,45 @@ def download_image(url: str) -> bytes | None:
 
 
 def generate_cover_svg(title: str, author: str) -> bytes:
-    title_safe = html.escape(title[:90] or "Untitled")
-    author_safe = html.escape(author[:90] or "Unknown Author")
-    svg = f"""<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='900' viewBox='0 0 1200 900'>
+    """Generate a portrait (3:4) SVG book cover with wrapped title and author."""
+
+    def _wrap(text: str, max_chars: int, max_lines: int) -> list[str]:
+        words = (text or "").split()
+        lines: list[str] = []
+        current = ""
+        for word in words:
+            candidate = (current + " " + word).strip()
+            if len(candidate) <= max_chars:
+                current = candidate
+            else:
+                if current:
+                    lines.append(current)
+                if len(lines) >= max_lines:
+                    break
+                current = word[:max_chars]
+        if current and len(lines) < max_lines:
+            lines.append(current)
+        return lines or [""]
+
+    title_lines = _wrap(title or "Untitled", 18, 3)
+    author_lines = _wrap(author or "Unknown", 22, 2)
+
+    title_line_h = 54
+    title_y = 300
+    author_y = title_y + len(title_lines) * title_line_h + 36
+
+    title_elems = "\n".join(
+        f"  <text x='40' y='{title_y + i * title_line_h}' fill='white' "
+        f"font-size='42' font-family='Georgia, serif'>{html.escape(line)}</text>"
+        for i, line in enumerate(title_lines)
+    )
+    author_elems = "\n".join(
+        f"  <text x='40' y='{author_y + i * 36}' fill='#cbd5e1' "
+        f"font-size='26' font-family='Verdana, sans-serif'>{html.escape(line)}</text>"
+        for i, line in enumerate(author_lines)
+    )
+
+    svg = f"""<svg xmlns='http://www.w3.org/2000/svg' width='600' height='800' viewBox='0 0 600 800'>
 <defs>
   <linearGradient id='bg' x1='0%' y1='0%' x2='100%' y2='100%'>
     <stop offset='0%' stop-color='#0f172a'/>
@@ -286,10 +348,10 @@ def generate_cover_svg(title: str, author: str) -> bytes:
     <stop offset='100%' stop-color='#0ea5e9'/>
   </linearGradient>
 </defs>
-<rect width='1200' height='900' fill='url(#bg)'/>
-<rect x='70' y='70' width='1060' height='760' rx='28' fill='rgba(255,255,255,0.10)'/>
-<text x='110' y='360' fill='white' font-size='64' font-family='Georgia, serif'>{title_safe}</text>
-<text x='110' y='460' fill='#e2e8f0' font-size='40' font-family='Verdana, sans-serif'>{author_safe}</text>
+<rect width='600' height='800' fill='url(#bg)'/>
+<rect x='30' y='30' width='540' height='740' rx='16' fill='rgba(255,255,255,0.08)'/>
+{title_elems}
+{author_elems}
 </svg>"""
     return svg.encode("utf-8")
 
@@ -368,6 +430,17 @@ def process_book(book_id: int) -> None:
                     book.cover_url = ""
                 else:
                     book.cover_url = google_meta["cover_url"]
+
+        # Fallback: try Open Library if still no cover
+        if not book.cover_blob and not book.cover_url:
+            ol_cover_url = fetch_cover_from_openlibrary(book.title_ai, book.author_ai)
+            if ol_cover_url:
+                img_data = download_image(ol_cover_url)
+                if img_data:
+                    book.cover_blob = img_data
+                else:
+                    book.cover_url = ol_cover_url
+
         if not book.cover_blob:
             book.cover_blob = generate_cover_svg(book.title_ai, book.author_ai)
 
