@@ -11,21 +11,22 @@
     <p><strong>Estado:</strong> {{ book.status }}</p>
     <p><strong>Género:</strong> {{ book.genre|default:"(pendiente)" }}</p>
     <p><strong>Idioma:</strong> {{ book.language|default:"(pendiente)" }}</p>
-    <p><strong>Tags:</strong>
+    <p><strong>Tags:</strong></p>
+    <div class="tags">
       {% for tag in book.tags_json %}
-        <span class="tag">{{ tag }}</span>
+        <a class="tag" href="/?tag={{ tag }}">{{ tag }}</a>
       {% empty %}
-        -
+        <span>-</span>
       {% endfor %}
-    </p>
+    </div>
     <p><strong>Sinopsis:</strong> {{ book.summary|default:"(pendiente)" }}</p>
     {% if book.status == "ready" %}
       <a class="download" href="/books/{{ book.id }}/download">Descargar</a>
     {% else %}
       <p>Este libro aún no está listo para descarga.</p>
-    {% endif %}
-    {% if book.scan_report %}
-      <p><strong>Reporte:</strong> {{ book.scan_report }}</p>
+      {% if book.scan_report %}
+        <p><strong>Reporte:</strong> {{ book.scan_report }}</p>
+      {% endif %}
     {% endif %}
   </div>
 </section>

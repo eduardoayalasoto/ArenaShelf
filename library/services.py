@@ -121,8 +121,8 @@ def fallback_ai_metadata(title_user: str, author_user: str) -> dict[str, Any]:
     return {
         "title_ai": title_user.strip(),
         "author_ai": author_user.strip(),
-        "genre": "Unknown",
-        "language": "unknown",
+        "genre": "Desconocido",
+        "language": "Desconocido",
         "tags": ["libro", "lectura", "digital", "texto"],
         "summary": "Sinopsis no disponible.",
     }
@@ -133,7 +133,7 @@ def validate_ai_payload(payload: dict[str, Any], title_user: str, author_user: s
         title_ai = str(payload.get("title_ai", "")).strip()
         author_ai = str(payload.get("author_ai", "")).strip()
         genre = str(payload.get("genre", "")).strip()
-        language = str(payload.get("language", "")).strip().lower()
+        language = str(payload.get("language", "")).strip()
         summary = str(payload.get("summary", "")).strip()
         tags_raw = payload.get("tags", [])
         tags = [str(t).strip().lower() for t in tags_raw if str(t).strip()]
@@ -145,9 +145,9 @@ def validate_ai_payload(payload: dict[str, Any], title_user: str, author_user: s
     if not author_ai:
         author_ai = author_user.strip()
     if not genre:
-        genre = "Unknown"
+        genre = "Desconocido"
     if not language:
-        language = "unknown"
+        language = "Desconocido"
     if len(tags) < 4:
         tags += ["libro", "lectura", "digital", "texto"]
     tags = tags[:8]
@@ -181,8 +181,11 @@ def enrich_with_ai(text: str, title_user: str, author_user: str) -> dict[str, An
             system_instruction=(
                 "Eres un analista editorial. Analiza el fragmento del libro y devuelve SOLO un objeto JSON "
                 "con exactamente estas llaves: title_ai, author_ai, genre, language, tags, summary. "
-                "tags debe ser un array con al menos 4 elementos en minúsculas. "
-                "language debe ser el código ISO 639-1 (ej: 'es', 'en', 'fr')."
+                "Reglas: "
+                "language debe ser el nombre completo del idioma en español (ej: 'Inglés', 'Español', 'Francés', 'Alemán'). "
+                "tags debe ser un array con al menos 4 elementos en minúsculas, en español. "
+                "summary debe ser un párrafo en español que describa el contenido del libro. "
+                "genre debe estar en español (ej: 'Tecnología', 'Autoayuda', 'Ficción', 'Historia')."
             ),
         )
 
@@ -235,9 +238,15 @@ def fetch_book_metadata_from_google(title: str, author: str) -> dict[str, Any] |
         cover_url = image_links.get("thumbnail") or image_links.get("smallThumbnail")
         cover_bytes = None
         if cover_url:
-            cover_url = cover_url.replace("zoom=1", "zoom=0").replace("http://", "https://")
+            cover_url = (cover_url
+                         .replace("zoom=1", "zoom=0")
+                         .replace("&edge=curl", "")
+                         .replace("http://", "https://"))
             try:
-                cover_req = Request(cover_url, headers={"User-Agent": "ArenaShelf/1.0"})
+                cover_req = Request(cover_url, headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; ArenaShelf/1.0)",
+                    "Accept": "image/jpeg,image/png,image/*",
+                })
                 with urlopen(cover_req, timeout=10) as cover_resp:
                     cover_bytes = cover_resp.read()
             except Exception:
