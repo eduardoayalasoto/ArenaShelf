@@ -401,6 +401,147 @@ def generate_cover_svg(title: str, author: str) -> bytes:
     return svg.encode("utf-8")
 
 
+def _epub_to_pdf(epub_data: bytes) -> bytes | None:
+    """Convert EPUB bytes to PDF bytes using fpdf2. Returns None on failure."""
+    try:
+        from fpdf import FPDF
+
+        def safe(s: str) -> str:
+            return s.encode("latin-1", errors="replace").decode("latin-1")
+
+        # Parse title/author from OPF embedded in the EPUB zip
+        title_str = "Sin título"
+        author_str = ""
+        with zipfile.ZipFile(BytesIO(epub_data)) as zf:
+            try:
+                container_xml = zf.read("META-INF/container.xml").decode("utf-8", errors="ignore")
+                opf_match = re.search(r'full-path="([^"]+\.opf)"', container_xml)
+                if opf_match:
+                    opf_xml = zf.read(opf_match.group(1)).decode("utf-8", errors="ignore")
+                    t = re.search(r"<dc:title[^>]*>([^<]+)", opf_xml)
+                    a = re.search(r"<dc:creator[^>]*>([^<]+)", opf_xml)
+                    if t:
+                        title_str = t.group(1).strip()
+                    if a:
+                        author_str = a.group(1).strip()
+            except Exception:
+                pass
+
+            # Collect text from HTML documents in alphabetical order (spine order approximation)
+            html_items = sorted(
+                n for n in zf.namelist() if n.lower().endswith((".xhtml", ".html", ".htm"))
+            )
+            doc_texts: list[str] = []
+            for name in html_items:
+                raw = zf.read(name).decode("utf-8", errors="ignore")
+                doc_texts.append(strip_html(raw))
+
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=20)
+        pdf.set_margins(20, 20, 20)
+
+        # Title page
+        pdf.add_page()
+        pdf.set_font("Helvetica", "B", 22)
+        pdf.multi_cell(0, 12, safe(title_str), align="C")
+        if author_str:
+            pdf.ln(6)
+            pdf.set_font("Helvetica", "", 14)
+            pdf.multi_cell(0, 8, safe(author_str), align="C")
+        pdf.ln(20)
+        pdf.set_font("Helvetica", "", 11)
+
+        for text in doc_texts:
+            for para in re.split(r"(?:\r?\n){2,}", text):
+                para = para.strip()
+                if not para:
+                    continue
+                pdf.multi_cell(0, 6, safe(para[:2000]))
+                pdf.ln(3)
+
+        return bytes(pdf.output())
+    except Exception:
+        return None
+
+
+def _pdf_to_epub(pdf_data: bytes) -> bytes | None:
+    """Convert PDF bytes to a minimal EPUB using PyPDF2 + manual zip assembly. Returns None on failure."""
+    try:
+        from PyPDF2 import PdfReader
+
+        reader = PdfReader(BytesIO(pdf_data))
+        page_texts = [(page.extract_text() or "").strip() for page in reader.pages]
+        page_texts = [t for t in page_texts if t]
+        if not page_texts:
+            return None
+
+        output = BytesIO()
+        with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
+            # mimetype must be first and stored uncompressed
+            mi = zipfile.ZipInfo("mimetype")
+            mi.compress_type = zipfile.ZIP_STORED
+            zf.writestr(mi, "application/epub+zip")
+
+            zf.writestr(
+                "META-INF/container.xml",
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+                "<rootfiles>"
+                '<rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>'
+                "</rootfiles>"
+                "</container>",
+            )
+
+            chapter_ids: list[str] = []
+            for i, text in enumerate(page_texts):
+                cid = f"page{i + 1}"
+                lines = [html.escape(ln) for ln in text.split("\n") if ln.strip()]
+                body = "".join(f"<p>{ln}</p>" for ln in lines)
+                xhtml = (
+                    '<?xml version="1.0" encoding="utf-8"?>'
+                    "<!DOCTYPE html>"
+                    '<html xmlns="http://www.w3.org/1999/xhtml">'
+                    f"<head><title>Página {i + 1}</title></head>"
+                    f"<body>{body}</body>"
+                    "</html>"
+                )
+                zf.writestr(f"OEBPS/{cid}.xhtml", xhtml)
+                chapter_ids.append(cid)
+
+            manifest = "\n".join(
+                f'<item id="{cid}" href="{cid}.xhtml" media-type="application/xhtml+xml"/>'
+                for cid in chapter_ids
+            )
+            spine = "\n".join(f'<itemref idref="{cid}"/>' for cid in chapter_ids)
+            opf = (
+                '<?xml version="1.0" encoding="utf-8"?>'
+                '<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="uid">'
+                '<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">'
+                "<dc:title>Converted Book</dc:title>"
+                "<dc:language>es</dc:language>"
+                "</metadata>"
+                f"<manifest>{manifest}</manifest>"
+                f"<spine>{spine}</spine>"
+                "</package>"
+            )
+            zf.writestr("OEBPS/content.opf", opf)
+
+        return output.getvalue()
+    except Exception:
+        return None
+
+
+def convert_format(ext: str, data: bytes) -> tuple[bytes, str] | tuple[None, None]:
+    """Convert epub→pdf or pdf→epub. Returns (bytes, new_ext) or (None, None) on failure."""
+    if ext == ".epub":
+        result = _epub_to_pdf(data)
+        return (result, ".pdf") if result else (None, None)
+    if ext == ".pdf":
+        result = _pdf_to_epub(data)
+        return (result, ".epub") if result else (None, None)
+    return None, None
+
+
 def process_book(book_id: int) -> None:
     """Process a book through validation, scanning, AI enrichment, and metadata lookup.
 
@@ -579,3 +720,13 @@ def _do_process_book(book_id: int) -> None:
                 "updated_at",
             ]
         )
+
+    # --- Step 8: format conversion (CPU-intensive, outside transaction) ---
+    # Failure here is non-fatal: book is already READY without the alt format.
+    alt_data, alt_ext = convert_format(ext, file_data)
+    if alt_data and alt_ext:
+        with transaction.atomic():
+            Book.objects.filter(id=book_id).update(
+                alt_blob=alt_data,
+                alt_extension=alt_ext,
+            )

@@ -14,8 +14,14 @@
     {% if book.status == "ready" %}
       <a href="/books/{{ book.id }}/download"
         class="block text-center px-4 py-3 bg-brand-navy hover:bg-brand-dark text-white font-semibold rounded-xl transition-colors text-sm tracking-wide">
-        Descargar
+        Descargar {{ book.extension|upper|cut:"." }}
       </a>
+      {% if book.alt_blob and book.alt_extension %}
+      <a href="/books/{{ book.id }}/download/alt"
+        class="block text-center px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors text-sm tracking-wide border border-slate-200">
+        Descargar {{ book.alt_extension|upper|cut:"." }}
+      </a>
+      {% endif %}
     {% else %}
       <p class="text-sm text-slate-400 text-center py-2">Procesando…</p>
       {% if book.scan_report %}

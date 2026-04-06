@@ -30,6 +30,8 @@ class Book(models.Model):
     sha256 = models.CharField(max_length=64, blank=True)
     file_blob = models.BinaryField()
     file_size = models.PositiveIntegerField(default=0)
+    alt_blob = models.BinaryField(null=True, blank=True)
+    alt_extension = models.CharField(max_length=16, blank=True)
     cover_blob = models.BinaryField(null=True, blank=True)
     cover_url = models.URLField(max_length=500, blank=True)
 
