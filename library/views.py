@@ -100,6 +100,13 @@ class DetailView(View):
         return render(request, self.template_name, {"book": book})
 
 
+class DeleteView(View):
+    def post(self, request, book_id: int):
+        book = get_object_or_404(Book, id=book_id)
+        book.delete()
+        return redirect("home")
+
+
 class DownloadView(View):
     def get(self, request, book_id: int):
         book = get_object_or_404(Book, id=book_id)
