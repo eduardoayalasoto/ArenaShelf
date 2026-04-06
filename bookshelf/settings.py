@@ -108,3 +108,16 @@ CLAMD_PORT = int(os.getenv("CLAMD_PORT", "3310"))
 CLAMD_STRICT = os.getenv("CLAMD_STRICT", "0") == "1"
 
 WORKER_POLL_SECONDS = int(os.getenv("WORKER_POLL_SECONDS", "3"))
+
+# ── Email (SMTP) ──────────────────────────────────────────────────────────────
+# Configure via environment variables. Gmail example:
+#   EMAIL_HOST=smtp.gmail.com  EMAIL_PORT=587  EMAIL_USE_TLS=1
+#   EMAIL_HOST_USER=you@gmail.com  EMAIL_HOST_PASSWORD=<App Password>
+#   EMAIL_FROM=ArenaShelf <you@gmail.com>   (optional, defaults to HOST_USER)
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1") == "1"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_FROM = os.getenv("EMAIL_FROM", EMAIL_HOST_USER)

@@ -21,6 +21,7 @@
     <p><strong>Sinopsis:</strong> {{ book.summary|default:"(pendiente)" }}</p>
     {% if book.status == "ready" %}
       <a class="download" href="/books/{{ book.id }}/download">Descargar</a>
+      <button type="button" class="btn-email" onclick="openEmailModal()">Enviar por mail</button>
     {% else %}
       <p>Este libro aún no está listo para descarga.</p>
     {% endif %}
@@ -29,4 +30,127 @@
     {% endif %}
   </div>
 </section>
+
+<!-- Email modal -->
+<div id="email-modal" role="dialog" aria-modal="true" aria-labelledby="email-modal-title"
+     style="display:none; position:fixed; inset:0; z-index:50; background:rgba(0,0,0,0.45);
+            align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; padding:2rem; max-width:380px; width:90%;
+              box-shadow:0 20px 60px rgba(0,0,0,0.3); display:flex; flex-direction:column; gap:1rem;">
+    <h2 id="email-modal-title" style="margin:0; font-size:1.25rem;">Enviar por correo</h2>
+    <p style="margin:0; color:#555; font-size:.9rem;">
+      Se enviará <strong>{{ book.title_ai|default:book.title_user }}</strong>
+      ({{ book.extension|upper|cut:"." }}) a la dirección que indiques.
+    </p>
+    <input type="email" id="email-input" placeholder="correo@ejemplo.com"
+           style="padding:.6rem .9rem; border:1px solid #ccc; border-radius:8px; font-size:.95rem; width:100%; box-sizing:border-box;"
+           onkeydown="if(event.key==='Enter') sendBookByEmail({{ book.id }})">
+    <p id="email-error" style="display:none; color:#c00; font-size:.85rem; margin:0;"></p>
+    <p id="email-success" style="display:none; color:#1a7f45; font-size:.9rem; margin:0; text-align:center;">
+      ¡Correo enviado correctamente!
+    </p>
+    <div style="display:flex; gap:.75rem; margin-top:.25rem;">
+      <button type="button" onclick="closeEmailModal()"
+              style="flex:1; padding:.6rem; border:1px solid #ccc; border-radius:8px;
+                     background:#fff; cursor:pointer; font-size:.9rem;">
+        Cancelar
+      </button>
+      <button type="button" id="email-send-btn" onclick="sendBookByEmail({{ book.id }})"
+              style="flex:1; padding:.6rem; border:none; border-radius:8px;
+                     background:#1e3a5f; color:#fff; cursor:pointer; font-size:.9rem; font-weight:600;">
+        Enviar
+      </button>
+    </div>
+  </div>
+</div>
+
+<style>
+.btn-email {
+  display: inline-block;
+  margin-top: .5rem;
+  padding: .55rem 1.2rem;
+  background: #f5f5f5;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: .9rem;
+  font-weight: 600;
+  color: #333;
+}
+.btn-email:hover { background: #e8e8e8; }
+</style>
+
+<script>
+function openEmailModal() {
+  const modal = document.getElementById('email-modal');
+  modal.style.display = 'flex';
+  document.getElementById('email-input').focus();
+}
+
+function closeEmailModal() {
+  document.getElementById('email-modal').style.display = 'none';
+  document.getElementById('email-input').value = '';
+  document.getElementById('email-error').style.display = 'none';
+  document.getElementById('email-success').style.display = 'none';
+  const btn = document.getElementById('email-send-btn');
+  btn.disabled = false;
+  btn.textContent = 'Enviar';
+}
+
+function sendBookByEmail(bookId) {
+  const input   = document.getElementById('email-input');
+  const errorEl = document.getElementById('email-error');
+  const successEl = document.getElementById('email-success');
+  const sendBtn = document.getElementById('email-send-btn');
+
+  errorEl.style.display = 'none';
+  successEl.style.display = 'none';
+
+  const email = input.value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errorEl.textContent = 'Ingresa una dirección de correo válida.';
+    errorEl.style.display = 'block';
+    input.focus();
+    return;
+  }
+
+  sendBtn.disabled = true;
+  sendBtn.textContent = 'Enviando…';
+
+  const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] ?? '';
+
+  fetch(`/books/${bookId}/email`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-CSRFToken': csrfToken,
+    },
+    body: `email=${encodeURIComponent(email)}`,
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) {
+      successEl.style.display = 'block';
+      input.value = '';
+      setTimeout(closeEmailModal, 2500);
+    } else {
+      errorEl.textContent = data.error || 'Error al enviar. Intenta de nuevo.';
+      errorEl.style.display = 'block';
+    }
+  })
+  .catch(() => {
+    errorEl.textContent = 'Error de red. Intenta de nuevo.';
+    errorEl.style.display = 'block';
+  })
+  .finally(() => {
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Enviar';
+  });
+}
+
+// Cerrar modal al hacer clic fuera de él
+document.getElementById('email-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeEmailModal();
+});
+</script>
 {% endblock %}

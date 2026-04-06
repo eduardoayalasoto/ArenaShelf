@@ -1,8 +1,14 @@
+import re
+
+from django.conf import settings
 from django.contrib import messages
-from django.http import Http404, HttpResponse
+from django.core.mail import EmailMessage
+from django.http import Http404, HttpResponse, JsonResponse
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
+
+_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 from .forms import BookUploadForm
 from .models import Book, ProcessingJob
@@ -102,3 +108,48 @@ class CoverView(View):
             "<rect width='1200' height='900' fill='#334155'/></svg>"
         )
         return HttpResponse(svg, content_type="image/svg+xml")
+
+
+class EmailBookView(View):
+    def post(self, request, book_id: int):
+        if not settings.EMAIL_HOST_USER:
+            return JsonResponse({"error": "El envío por correo no está configurado en el servidor."}, status=503)
+
+        book = get_object_or_404(Book, id=book_id)
+        if book.status != Book.Status.READY:
+            return JsonResponse({"error": "El libro aún no está listo."}, status=400)
+
+        recipient = request.POST.get("email", "").strip()
+        if not _EMAIL_RE.match(recipient):
+            return JsonResponse({"error": "Dirección de correo inválida."}, status=400)
+
+        # Prefer EPUB; fall back to whatever format was uploaded
+        if book.extension == ".epub":
+            file_data = bytes(book.file_blob)
+            mime = "application/epub+zip"
+            ext = ".epub"
+        else:
+            file_data = bytes(book.file_blob)
+            mime = book.mime_type or "application/octet-stream"
+            ext = book.extension or ""
+
+        title = book.title_ai or book.title_user
+        author = book.author_ai or book.author_user
+        attachment_name = f"{title} - {author}{ext}"
+
+        try:
+            msg = EmailMessage(
+                subject=title,
+                body=(
+                    f"Hola,\n\n"
+                    f"Aquí está tu libro: {title} de {author}.\n\n"
+                    f"Enviado desde ArenaShelf."
+                ),
+                from_email=settings.EMAIL_FROM or settings.EMAIL_HOST_USER,
+                to=[recipient],
+            )
+            msg.attach(attachment_name, file_data, mime)
+            msg.send(fail_silently=False)
+            return JsonResponse({"ok": True})
+        except Exception as exc:
+            return JsonResponse({"error": f"Error al enviar: {exc}"}, status=500)
