@@ -210,45 +210,87 @@ def enrich_with_ai(text: str, title_user: str, author_user: str) -> dict[str, An
 
 
 def fetch_book_metadata_from_google(title: str, author: str) -> dict[str, Any] | None:
-    """Query Google Books API for canonical title, author and cover URL."""
+    """Query Google Books API for canonical title, author, cover URL and extra metadata."""
     try:
         from urllib.request import Request, urlopen
         from urllib.parse import urlencode
-
-        params = urlencode({"q": f"intitle:{title} inauthor:{author}", "maxResults": 1,
-                            "fields": "items(volumeInfo/title,volumeInfo/subtitle,volumeInfo/authors,volumeInfo/imageLinks)"})
-        req = Request(
-            f"https://www.googleapis.com/books/v1/volumes?{params}",
-            headers={"User-Agent": "ArenaShelf/1.0"},
-        )
         import json as _json
-        with urlopen(req, timeout=10) as resp:
-            data = _json.loads(resp.read())
 
-        items = data.get("items")
+        # Strip punctuation that breaks Google Books field-restricted queries
+        clean_title = re.sub(r"[¡!¿?\"']", "", title).strip()
+        clean_author = re.sub(r"[¡!¿?\"']", "", author).strip()
+
+        # Try progressively looser queries until we get results
+        queries = [
+            f'intitle:"{clean_title}" inauthor:"{clean_author}"',
+            f'"{clean_title}" "{clean_author}"',
+            f'intitle:"{clean_title}"',
+            f'"{clean_title}"',
+        ]
+
+        fields = (
+            "items(volumeInfo/title,volumeInfo/authors,"
+            "volumeInfo/imageLinks,volumeInfo/publishedDate,"
+            "volumeInfo/pageCount,volumeInfo/publisher)"
+        )
+
+        data = None
+        for query in queries:
+            params = urlencode({"q": query, "maxResults": 3, "fields": fields})
+            req = Request(
+                f"https://www.googleapis.com/books/v1/volumes?{params}",
+                headers={"User-Agent": "ArenaShelf/1.0"},
+            )
+            with urlopen(req, timeout=15) as resp:
+                data = _json.loads(resp.read())
+            if data.get("items"):
+                break
+
+        items = data.get("items") if data else None
         if not items:
             return None
 
-        info = items[0].get("volumeInfo", {})
+        # Pick the first result that has a cover image, otherwise fallback to first result
+        chosen = items[0]
+        for item in items:
+            if item.get("volumeInfo", {}).get("imageLinks"):
+                chosen = item
+                break
+
+        info = chosen.get("volumeInfo", {})
         real_title = info.get("title", "").strip()
-        subtitle = info.get("subtitle", "").strip()
-        if subtitle and subtitle.lower() not in real_title.lower():
-            real_title = f"{real_title}: {subtitle}"
+        # Do NOT append subtitle — for classic books it's often descriptive text, not a real subtitle
         authors = info.get("authors") or []
         real_author = ", ".join(authors).strip()
 
         image_links = info.get("imageLinks", {})
-        cover_url = image_links.get("thumbnail") or image_links.get("smallThumbnail") or ""
+        cover_url = (
+            image_links.get("extraLarge")
+            or image_links.get("large")
+            or image_links.get("medium")
+            or image_links.get("thumbnail")
+            or image_links.get("smallThumbnail")
+            or ""
+        )
         if cover_url:
-            cover_url = (cover_url
-                         .replace("zoom=1", "zoom=6")
-                         .replace("&edge=curl", "")
-                         .replace("http://", "https://"))
+            cover_url = (
+                cover_url
+                .replace("zoom=1", "zoom=6")
+                .replace("&edge=curl", "")
+                .replace("http://", "https://")
+            )
 
         if not real_title and not real_author:
             return None
 
-        return {"title": real_title, "author": real_author, "cover_url": cover_url}
+        return {
+            "title": real_title,
+            "author": real_author,
+            "cover_url": cover_url,
+            "published_date": info.get("publishedDate", ""),
+            "page_count": info.get("pageCount"),
+            "publisher": info.get("publisher", ""),
+        }
     except Exception:
         return None
 
@@ -426,6 +468,12 @@ def process_book(book_id: int) -> None:
         if google_meta:
             book.title_ai = google_meta["title"] or book.title_ai
             book.author_ai = google_meta["author"] or book.author_ai
+            if google_meta.get("published_date"):
+                book.published_date = google_meta["published_date"]
+            if google_meta.get("page_count"):
+                book.page_count = google_meta["page_count"]
+            if google_meta.get("publisher"):
+                book.publisher = google_meta["publisher"]
             if google_meta.get("cover_url"):
                 img_data = download_image(google_meta["cover_url"])
                 if img_data:
@@ -462,6 +510,9 @@ def process_book(book_id: int) -> None:
                 "normalized_filename",
                 "cover_blob",
                 "cover_url",
+                "published_date",
+                "page_count",
+                "publisher",
                 "updated_at",
             ]
         )
