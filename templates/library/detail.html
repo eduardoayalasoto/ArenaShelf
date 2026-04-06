@@ -8,7 +8,8 @@
   <div class="flex flex-col gap-4">
     <div class="rounded-2xl overflow-hidden shadow-lg border border-slate-100 aspect-[3/4] bg-slate-100">
       <img src="/books/{{ book.id }}/cover" alt="Portada"
-        class="w-full h-full object-cover">
+        class="w-full h-full object-cover"
+        onerror="this.onerror=null;this.src='/books/{{ book.id }}/cover?svg=1'">
     </div>
     {% if book.status == "ready" %}
       <a href="/books/{{ book.id }}/download"
