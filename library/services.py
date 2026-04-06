@@ -464,16 +464,35 @@ def _epub_to_pdf(epub_data: bytes) -> bytes | None:
         return None
 
 
+_PAGES_PER_CHAPTER = 10
+
+
 def _pdf_to_epub(pdf_data: bytes) -> bytes | None:
-    """Convert PDF bytes to a minimal EPUB using PyPDF2 + manual zip assembly. Returns None on failure."""
+    """Convert PDF bytes to EPUB using pypdf + manual zip assembly.
+
+    Groups pages into chapters of _PAGES_PER_CHAPTER to keep the EPUB
+    navigable. All pages are preserved — those with no extractable text
+    get a placeholder so the chapter count matches the original PDF.
+    """
     try:
         from PyPDF2 import PdfReader
 
         reader = PdfReader(BytesIO(pdf_data))
-        page_texts = [(page.extract_text() or "").strip() for page in reader.pages]
-        page_texts = [t for t in page_texts if t]
-        if not page_texts:
+        total = len(reader.pages)
+        if total == 0:
             return None
+
+        all_texts = [(page.extract_text() or "").strip() for page in reader.pages]
+
+        # Group into chapters of _PAGES_PER_CHAPTER pages each
+        chapters: list[tuple[str, str]] = []  # (title, combined_text)
+        for start in range(0, total, _PAGES_PER_CHAPTER):
+            end = min(start + _PAGES_PER_CHAPTER, total)
+            label = (
+                f"Páginas {start + 1}–{end}" if end > start + 1 else f"Página {start + 1}"
+            )
+            combined = "\n\n".join(t for t in all_texts[start:end] if t)
+            chapters.append((label, combined))
 
         output = BytesIO()
         with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -492,39 +511,60 @@ def _pdf_to_epub(pdf_data: bytes) -> bytes | None:
                 "</container>",
             )
 
-            chapter_ids: list[str] = []
-            for i, text in enumerate(page_texts):
-                cid = f"page{i + 1}"
-                lines = [html.escape(ln) for ln in text.split("\n") if ln.strip()]
-                body = "".join(f"<p>{ln}</p>" for ln in lines)
+            cids: list[tuple[str, str]] = []  # (id, title)
+            for i, (title, text) in enumerate(chapters):
+                cid = f"chap{i + 1}"
+                if text:
+                    lines = [html.escape(ln) for ln in text.split("\n") if ln.strip()]
+                    body = "".join(f"<p>{ln}</p>" for ln in lines)
+                else:
+                    body = "<p><em>[Contenido no extraíble — posible imagen o font embebida]</em></p>"
                 xhtml = (
                     '<?xml version="1.0" encoding="utf-8"?>'
                     "<!DOCTYPE html>"
                     '<html xmlns="http://www.w3.org/1999/xhtml">'
-                    f"<head><title>Página {i + 1}</title></head>"
-                    f"<body>{body}</body>"
+                    f"<head><title>{html.escape(title)}</title></head>"
+                    f"<body><h2>{html.escape(title)}</h2>{body}</body>"
                     "</html>"
                 )
                 zf.writestr(f"OEBPS/{cid}.xhtml", xhtml)
-                chapter_ids.append(cid)
+                cids.append((cid, title))
 
             manifest = "\n".join(
                 f'<item id="{cid}" href="{cid}.xhtml" media-type="application/xhtml+xml"/>'
-                for cid in chapter_ids
+                for cid, _ in cids
             )
-            spine = "\n".join(f'<itemref idref="{cid}"/>' for cid in chapter_ids)
+            manifest += '\n<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>'
+            spine = "\n".join(f'<itemref idref="{cid}"/>' for cid, _ in cids)
             opf = (
                 '<?xml version="1.0" encoding="utf-8"?>'
                 '<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="uid">'
                 '<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">'
-                "<dc:title>Converted Book</dc:title>"
+                f"<dc:title>Converted Book ({total} páginas)</dc:title>"
                 "<dc:language>es</dc:language>"
                 "</metadata>"
-                f"<manifest>{manifest}</manifest>"
-                f"<spine>{spine}</spine>"
+                f'<manifest>{manifest}</manifest>'
+                f'<spine toc="ncx">{spine}</spine>'
                 "</package>"
             )
             zf.writestr("OEBPS/content.opf", opf)
+
+            nav_points = "\n".join(
+                f'<navPoint id="nav{i}" playOrder="{i + 1}">'
+                f"<navLabel><text>{html.escape(title)}</text></navLabel>"
+                f'<content src="{cid}.xhtml"/>'
+                f"</navPoint>"
+                for i, (cid, title) in enumerate(cids)
+            )
+            ncx = (
+                '<?xml version="1.0" encoding="utf-8"?>'
+                '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">'
+                '<head><meta name="dtb:uid" content="converted"/></head>'
+                "<docTitle><text>Converted Book</text></docTitle>"
+                f"<navMap>{nav_points}</navMap>"
+                "</ncx>"
+            )
+            zf.writestr("OEBPS/toc.ncx", ncx)
 
         return output.getvalue()
     except Exception:
