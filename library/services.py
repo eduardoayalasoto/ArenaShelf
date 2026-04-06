@@ -401,126 +401,181 @@ def generate_cover_svg(title: str, author: str) -> bytes:
     return svg.encode("utf-8")
 
 
-@transaction.atomic
 def process_book(book_id: int) -> None:
-    book = Book.objects.select_for_update().get(id=book_id)
+    """Process a book through validation, scanning, AI enrichment, and metadata lookup.
+
+    Uses short targeted transactions instead of one long atomic block so that
+    SQLite is never locked during external I/O (ClamAV, Gemini, Google Books,
+    image downloads). This prevents concurrent uploads from getting a 500 error
+    while a book is being processed.
+    """
     try:
+        _do_process_book(book_id)
+    except Book.DoesNotExist:
+        pass  # book was deleted during processing — nothing to update
+    except Exception as exc:
+        with transaction.atomic():
+            Book.objects.filter(id=book_id).update(
+                status=Book.Status.ERROR,
+                scan_report=str(exc),
+            )
+
+
+def _do_process_book(book_id: int) -> None:
+    # --- Step 1: read initial data and mark as VALIDATING (short transaction) ---
+    with transaction.atomic():
+        book = Book.objects.get(id=book_id)
+        title_user = book.title_user
+        author_user = book.author_user
+        original_filename = book.original_filename
+        file_data = bytes(book.file_blob)
         book.status = Book.Status.VALIDATING
         book.save(update_fields=["status", "updated_at"])
 
-        data = bytes(book.file_blob)
-        ext, mime = validate_upload(book.original_filename, data)
-        book.extension = ext
-        book.mime_type = mime
-        book.file_size = len(data)
-        book.sha256 = sha256_bytes(data)
+    scan_report = ""
 
-        clean, report = scan_with_clamav(data)
-        book.scan_report = report
+    # --- Step 2: validate file format (CPU only, no DB lock needed) ---
+    try:
+        ext, mime = validate_upload(original_filename, file_data)
+    except ValidationError as exc:
+        with transaction.atomic():
+            Book.objects.filter(id=book_id).update(
+                status=Book.Status.REJECTED,
+                scan_report=str(exc),
+            )
+        return
+
+    sha256 = sha256_bytes(file_data)
+    file_size = len(file_data)
+
+    # --- Step 3: ClamAV scan (external process, no DB lock needed) ---
+    try:
+        clean, scan_report = scan_with_clamav(file_data)
+    except Exception as exc:
+        clean, scan_report = True, f"ClamAV unavailable: {exc}"
+
+    with transaction.atomic():
         if not clean:
-            book.status = Book.Status.REJECTED
-            book.save(update_fields=["status", "scan_report", "extension", "mime_type", "file_size", "sha256", "updated_at"])
+            Book.objects.filter(id=book_id).update(
+                status=Book.Status.REJECTED,
+                scan_report=scan_report,
+                extension=ext,
+                mime_type=mime,
+                file_size=file_size,
+                sha256=sha256,
+            )
             return
+        Book.objects.filter(id=book_id).update(
+            status=Book.Status.SCANNED,
+            scan_report=scan_report,
+            extension=ext,
+            mime_type=mime,
+            file_size=file_size,
+            sha256=sha256,
+        )
 
-        book.status = Book.Status.SCANNED
-        book.save(update_fields=["status", "scan_report", "extension", "mime_type", "file_size", "sha256", "updated_at"])
+    # --- Step 4: AI enrichment (external API, no DB lock needed) ---
+    text = extract_text_for_ai(ext, file_data)
+    try:
+        ai = enrich_with_ai(text, title_user, author_user)
+    except RuntimeError as enrichment_error:
+        ai = fallback_ai_metadata(title_user, author_user)
+        scan_report = f"{scan_report}; Metadatos IA: {enrichment_error}"
 
-        text = extract_text_for_ai(ext, data)
-        try:
-            ai = enrich_with_ai(text, book.title_user, book.author_user)
-        except RuntimeError as enrichment_error:
-            ai = fallback_ai_metadata(book.title_user, book.author_user)
-            book.scan_report = f"{book.scan_report}; Metadatos IA: {enrichment_error}"
+    title_ai = ai["title_ai"]
+    author_ai = ai["author_ai"]
 
-        book.status = Book.Status.ENRICHED
-        book.title_ai = ai["title_ai"]
-        book.author_ai = ai["author_ai"]
-        book.genre = ai["genre"]
-        book.language = ai["language"]
-        book.tags_json = ai["tags"]
-        book.summary = ai["summary"]
-
-        duplicate = (
-            Book.objects.exclude(id=book.id)
-            .filter(sha256=book.sha256, language=book.language)
+    # --- Step 5: duplicate check + save ENRICHED (short transaction) ---
+    with transaction.atomic():
+        is_duplicate = (
+            Book.objects.exclude(id=book_id)
+            .filter(sha256=sha256, language=ai["language"])
             .exclude(status__in=[Book.Status.REJECTED, Book.Status.ERROR])
             .exists()
         )
-        if duplicate:
-            book.status = Book.Status.REJECTED
-            book.scan_report = "Duplicate content with same language"
-            book.save(
-                update_fields=[
-                    "status",
-                    "title_ai",
-                    "author_ai",
-                    "genre",
-                    "language",
-                    "tags_json",
-                    "summary",
-                    "scan_report",
-                    "updated_at",
-                ]
+        if is_duplicate:
+            Book.objects.filter(id=book_id).update(
+                status=Book.Status.REJECTED,
+                title_ai=title_ai,
+                author_ai=author_ai,
+                genre=ai["genre"],
+                language=ai["language"],
+                tags_json=ai["tags"],
+                summary=ai["summary"],
+                scan_report="Duplicate content with same language",
             )
             return
+        Book.objects.filter(id=book_id).update(
+            status=Book.Status.ENRICHED,
+            title_ai=title_ai,
+            author_ai=author_ai,
+            genre=ai["genre"],
+            language=ai["language"],
+            tags_json=ai["tags"],
+            summary=ai["summary"],
+            scan_report=scan_report,
+        )
 
-        google_meta = fetch_book_metadata_from_google(book.title_ai, book.author_ai)
-        if google_meta:
-            book.title_ai = google_meta["title"] or book.title_ai
-            book.author_ai = google_meta["author"] or book.author_ai
-            if google_meta.get("published_date"):
-                book.published_date = google_meta["published_date"]
-            if google_meta.get("page_count"):
-                book.page_count = google_meta["page_count"]
-            if google_meta.get("publisher"):
-                book.publisher = google_meta["publisher"]
-            if google_meta.get("cover_url"):
-                img_data = download_image(google_meta["cover_url"])
-                if img_data:
-                    book.cover_blob = img_data
-                    book.cover_url = ""
-                else:
-                    book.cover_url = google_meta["cover_url"]
+    # --- Step 6: external metadata + cover (network I/O, no DB lock needed) ---
+    published_date = ""
+    page_count = None
+    publisher = ""
+    cover_blob = None
+    cover_url = ""
 
-        # Fallback: try Open Library if still no cover
-        if not book.cover_blob and not book.cover_url:
-            ol_cover_url = fetch_cover_from_openlibrary(book.title_ai, book.author_ai)
-            if ol_cover_url:
-                img_data = download_image(ol_cover_url)
-                if img_data:
-                    book.cover_blob = img_data
-                else:
-                    book.cover_url = ol_cover_url
+    google_meta = fetch_book_metadata_from_google(title_ai, author_ai)
+    if google_meta:
+        title_ai = google_meta["title"] or title_ai
+        author_ai = google_meta["author"] or author_ai
+        published_date = google_meta.get("published_date") or ""
+        page_count = google_meta.get("page_count")
+        publisher = google_meta.get("publisher") or ""
+        if google_meta.get("cover_url"):
+            img_data = download_image(google_meta["cover_url"])
+            if img_data:
+                cover_blob = img_data
+            else:
+                cover_url = google_meta["cover_url"]
 
-        if not book.cover_blob:
-            book.cover_blob = generate_cover_svg(book.title_ai, book.author_ai)
+    if not cover_blob and not cover_url:
+        ol_cover_url = fetch_cover_from_openlibrary(title_ai, author_ai)
+        if ol_cover_url:
+            img_data = download_image(ol_cover_url)
+            if img_data:
+                cover_blob = img_data
+            else:
+                cover_url = ol_cover_url
 
-        book.normalized_filename = normalized_download_filename(book.author_ai, book.title_ai, ext)
+    if not cover_blob:
+        cover_blob = generate_cover_svg(title_ai, author_ai)
+
+    normalized_filename = normalized_download_filename(author_ai, title_ai, ext)
+
+    # --- Step 7: final save as READY (short transaction) ---
+    with transaction.atomic():
+        book = Book.objects.get(id=book_id)
         book.status = Book.Status.READY
+        book.title_ai = title_ai
+        book.author_ai = author_ai
+        book.published_date = published_date
+        book.page_count = page_count
+        book.publisher = publisher
+        book.cover_blob = cover_blob
+        book.cover_url = cover_url
+        book.normalized_filename = normalized_filename
+        book.scan_report = scan_report
         book.save(
             update_fields=[
                 "status",
                 "title_ai",
                 "author_ai",
-                "genre",
-                "language",
-                "tags_json",
-                "summary",
-                "scan_report",
-                "normalized_filename",
-                "cover_blob",
-                "cover_url",
                 "published_date",
                 "page_count",
                 "publisher",
+                "cover_blob",
+                "cover_url",
+                "normalized_filename",
+                "scan_report",
                 "updated_at",
             ]
         )
-    except ValidationError as exc:
-        book.status = Book.Status.REJECTED
-        book.scan_report = str(exc)
-        book.save(update_fields=["status", "scan_report", "updated_at"])
-    except Exception as exc:
-        book.status = Book.Status.ERROR
-        book.scan_report = str(exc)
-        book.save(update_fields=["status", "scan_report", "updated_at"])
