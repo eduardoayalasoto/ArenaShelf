@@ -119,6 +119,25 @@ class DownloadView(View):
         return resp
 
 
+_ALT_MIME = {".pdf": "application/pdf", ".epub": "application/epub+zip"}
+
+
+class DownloadAltView(View):
+    def get(self, request, book_id: int):
+        book = get_object_or_404(Book, id=book_id)
+        if book.status != Book.Status.READY or not book.alt_blob or not book.alt_extension:
+            raise Http404("Formato alternativo no disponible")
+
+        ext = book.alt_extension
+        mime = _ALT_MIME.get(ext, "application/octet-stream")
+        base = (book.normalized_filename or book.original_filename).rsplit(".", 1)[0]
+        filename = f"{base}{ext}"
+
+        resp = HttpResponse(bytes(book.alt_blob), content_type=mime)
+        resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return resp
+
+
 def _cover_content_type(data: bytes) -> str:
     if data[:3] == b"\xff\xd8\xff":
         return "image/jpeg"
