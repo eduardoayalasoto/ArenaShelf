@@ -19,6 +19,9 @@ class Book(models.Model):
     language = models.CharField(max_length=32, blank=True)
     summary = models.TextField(blank=True)
     tags_json = models.JSONField(default=list, blank=True)
+    published_date = models.CharField(max_length=20, blank=True)
+    page_count = models.PositiveIntegerField(null=True, blank=True)
+    publisher = models.CharField(max_length=255, blank=True)
 
     original_filename = models.CharField(max_length=255)
     normalized_filename = models.CharField(max_length=255, blank=True)

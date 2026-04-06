@@ -30,7 +30,7 @@
     </h1>
     <p class="text-slate-500 text-lg mb-8">{{ book.author_ai|default:book.author_user }}</p>
 
-    <!-- Genre + Language -->
+    <!-- Genre + Language + Year + Pages + Publisher -->
     <div class="flex flex-wrap gap-6 mb-8">
       {% if book.genre %}
       <div>
@@ -42,6 +42,24 @@
       <div>
         <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">Idioma</p>
         <p class="text-slate-800 font-medium">{{ book.language }}</p>
+      </div>
+      {% endif %}
+      {% if book.published_date %}
+      <div>
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">Publicación</p>
+        <p class="text-slate-800 font-medium">{{ book.published_date }}</p>
+      </div>
+      {% endif %}
+      {% if book.page_count %}
+      <div>
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">Páginas</p>
+        <p class="text-slate-800 font-medium">{{ book.page_count }}</p>
+      </div>
+      {% endif %}
+      {% if book.publisher %}
+      <div>
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">Editorial</p>
+        <p class="text-slate-800 font-medium">{{ book.publisher }}</p>
       </div>
       {% endif %}
     </div>
