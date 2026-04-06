@@ -100,6 +100,13 @@ class DetailView(View):
         return render(request, self.template_name, {"book": book})
 
 
+class DeleteView(View):
+    def post(self, request, book_id: int):
+        book = get_object_or_404(Book, id=book_id)
+        book.delete()
+        return redirect("home")
+
+
 class DownloadView(View):
     def get(self, request, book_id: int):
         book = get_object_or_404(Book, id=book_id)
@@ -127,8 +134,12 @@ class CoverView(View):
         from .services import generate_cover_svg
 
         book = get_object_or_404(Book, id=book_id)
-        if book.cover_url:
-            return redirect(book.cover_url)
+        if request.GET.get("svg"):
+            data = generate_cover_svg(
+                book.title_ai or book.title_user,
+                book.author_ai or book.author_user,
+            )
+            return HttpResponse(data, content_type="image/svg+xml")
         if book.cover_blob:
             data = bytes(book.cover_blob)
             ct = _cover_content_type(data)
@@ -139,6 +150,8 @@ class CoverView(View):
                     book.author_ai or book.author_user,
                 )
             return HttpResponse(data, content_type=ct)
+        if book.cover_url:
+            return redirect(book.cover_url)
         data = generate_cover_svg(
             book.title_ai or book.title_user,
             book.author_ai or book.author_user,

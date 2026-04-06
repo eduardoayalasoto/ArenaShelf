@@ -39,7 +39,8 @@
     <div class="aspect-[3/4] overflow-hidden bg-slate-100">
       <img src="/books/{{ book.id }}/cover"
         alt="{{ book.title_ai|default:book.title_user }}"
-        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+        onerror="this.onerror=null;this.src='/books/{{ book.id }}/cover?svg=1'">
     </div>
     <div class="p-3 flex flex-col flex-1">
       <h3 class="font-semibold text-slate-900 text-sm leading-snug mb-1 line-clamp-2">
