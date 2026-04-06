@@ -401,6 +401,82 @@ def generate_cover_svg(title: str, author: str) -> bytes:
     return svg.encode("utf-8")
 
 
+def _epub_spine_texts(epub_data: bytes) -> tuple[str, str, list[str]]:
+    """Return (title, author, ordered list of text chunks) following the OPF spine.
+
+    Reads the OPF spine to get the correct document reading order instead of
+    sorting filenames alphabetically, which breaks chapter order in most EPUBs.
+    Navigation documents (nav.xhtml, toc pages) are excluded from content.
+    """
+    title_str = "Sin título"
+    author_str = ""
+    doc_texts: list[str] = []
+
+    with zipfile.ZipFile(BytesIO(epub_data)) as zf:
+        all_names = set(zf.namelist())
+
+        # --- locate OPF ---
+        opf_path: str | None = None
+        try:
+            container_xml = zf.read("META-INF/container.xml").decode("utf-8", errors="ignore")
+            m = re.search(r'full-path="([^"]+\.opf)"', container_xml)
+            if m:
+                opf_path = m.group(1)
+        except Exception:
+            pass
+
+        if opf_path and opf_path in all_names:
+            opf_xml = zf.read(opf_path).decode("utf-8", errors="ignore")
+            opf_dir = opf_path.rsplit("/", 1)[0] + "/" if "/" in opf_path else ""
+
+            t = re.search(r"<dc:title[^>]*>([^<]+)", opf_xml)
+            a = re.search(r"<dc:creator[^>]*>([^<]+)", opf_xml)
+            if t:
+                title_str = t.group(1).strip()
+            if a:
+                author_str = a.group(1).strip()
+
+            # manifest: id → href
+            manifest: dict[str, str] = {}
+            for item_m in re.finditer(r"<item\b[^>]+>", opf_xml):
+                tag = item_m.group(0)
+                id_m = re.search(r'\bid="([^"]+)"', tag)
+                href_m = re.search(r'\bhref="([^"]+)"', tag)
+                if id_m and href_m:
+                    manifest[id_m.group(1)] = href_m.group(1)
+
+            # nav item ids to skip (EPUB3 navigation document)
+            nav_ids: set[str] = set()
+            for item_m in re.finditer(r'<item\b[^>]+\bproperties="[^"]*\bnav\b[^"]*"[^>]*>', opf_xml):
+                id_m = re.search(r'\bid="([^"]+)"', item_m.group(0))
+                if id_m:
+                    nav_ids.add(id_m.group(1))
+
+            # spine: ordered idrefs
+            for spine_m in re.finditer(r'<itemref\b[^>]*\bidref="([^"]+)"', opf_xml):
+                idref = spine_m.group(1)
+                if idref in nav_ids or idref not in manifest:
+                    continue
+                href = manifest[idref]
+                # resolve relative href against OPF directory
+                full = opf_dir + href if not href.startswith("/") else href.lstrip("/")
+                if full in all_names:
+                    raw = zf.read(full).decode("utf-8", errors="ignore")
+                    text = strip_html(raw).strip()
+                    if text:
+                        doc_texts.append(text)
+        else:
+            # Fallback when no OPF found: alphabetical order
+            for name in sorted(all_names):
+                if name.lower().endswith((".xhtml", ".html", ".htm")):
+                    raw = zf.read(name).decode("utf-8", errors="ignore")
+                    text = strip_html(raw).strip()
+                    if text:
+                        doc_texts.append(text)
+
+    return title_str, author_str, doc_texts
+
+
 def _epub_to_pdf(epub_data: bytes) -> bytes | None:
     """Convert EPUB bytes to PDF bytes using fpdf2. Returns None on failure."""
     try:
@@ -409,32 +485,10 @@ def _epub_to_pdf(epub_data: bytes) -> bytes | None:
         def safe(s: str) -> str:
             return s.encode("latin-1", errors="replace").decode("latin-1")
 
-        # Parse title/author from OPF embedded in the EPUB zip
-        title_str = "Sin título"
-        author_str = ""
-        with zipfile.ZipFile(BytesIO(epub_data)) as zf:
-            try:
-                container_xml = zf.read("META-INF/container.xml").decode("utf-8", errors="ignore")
-                opf_match = re.search(r'full-path="([^"]+\.opf)"', container_xml)
-                if opf_match:
-                    opf_xml = zf.read(opf_match.group(1)).decode("utf-8", errors="ignore")
-                    t = re.search(r"<dc:title[^>]*>([^<]+)", opf_xml)
-                    a = re.search(r"<dc:creator[^>]*>([^<]+)", opf_xml)
-                    if t:
-                        title_str = t.group(1).strip()
-                    if a:
-                        author_str = a.group(1).strip()
-            except Exception:
-                pass
+        title_str, author_str, doc_texts = _epub_spine_texts(epub_data)
 
-            # Collect text from HTML documents in alphabetical order (spine order approximation)
-            html_items = sorted(
-                n for n in zf.namelist() if n.lower().endswith((".xhtml", ".html", ".htm"))
-            )
-            doc_texts: list[str] = []
-            for name in html_items:
-                raw = zf.read(name).decode("utf-8", errors="ignore")
-                doc_texts.append(strip_html(raw))
+        if not doc_texts:
+            return None
 
         pdf = FPDF()
         pdf.set_auto_page_break(auto=True, margin=20)
@@ -456,7 +510,8 @@ def _epub_to_pdf(epub_data: bytes) -> bytes | None:
                 para = para.strip()
                 if not para:
                     continue
-                pdf.multi_cell(0, 6, safe(para[:2000]))
+                # Write full paragraph without truncation
+                pdf.multi_cell(0, 6, safe(para))
                 pdf.ln(3)
 
         return bytes(pdf.output())
