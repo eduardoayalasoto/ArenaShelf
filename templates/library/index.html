@@ -1,48 +1,63 @@
 {% extends "base.html" %}
-{% block title %}Catálogo de libros{% endblock %}
+{% block title %}Catálogo · ArenaShelf{% endblock %}
 {% block content %}
-<section class="hero">
-  <h1>Biblioteca Digital</h1>
-  <p>Catálogo visual de libros en PDF y EPUB.</p>
-</section>
 
-<form class="filters" method="get">
-  <input type="text" name="q" value="{{ q }}" placeholder="Buscar por título o autor">
-  <select name="genre">
+<div class="mb-8">
+  <h1 class="font-display text-4xl font-bold text-slate-900 mb-1">Biblioteca Digital</h1>
+  <p class="text-slate-500">Catálogo de libros en PDF y EPUB</p>
+</div>
+
+<form class="flex flex-wrap gap-2 mb-8" method="get">
+  <input type="text" name="q" value="{{ q }}" placeholder="Buscar título o autor…"
+    class="flex-1 min-w-[200px] px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+  <select name="genre"
+    class="px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-magenta appearance-none cursor-pointer text-slate-700">
     <option value="">Todos los géneros</option>
     {% for g in genres %}
       <option value="{{ g }}" {% if genre == g %}selected{% endif %}>{{ g }}</option>
     {% endfor %}
   </select>
-  <select name="language">
+  <select name="language"
+    class="px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-magenta appearance-none cursor-pointer text-slate-700">
     <option value="">Todos los idiomas</option>
     {% for l in languages %}
       <option value="{{ l }}" {% if language == l %}selected{% endif %}>{{ l }}</option>
     {% endfor %}
   </select>
-  <input type="text" name="tag" value="{{ tag }}" placeholder="Tag">
-  <button type="submit">Filtrar</button>
+  <input type="text" name="tag" value="{{ tag }}" placeholder="Tag…"
+    class="w-32 px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-magenta">
+  <button type="submit"
+    class="px-6 py-2.5 text-sm font-semibold bg-brand-navy hover:bg-brand-dark text-white rounded-xl shadow-sm transition-colors cursor-pointer">
+    Filtrar
+  </button>
 </form>
 
-<section class="grid">
+<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
   {% for book in books %}
-    <article class="book-card">
-      <a href="/books/{{ book.id }}" class="cover-frame">
-        <img src="/books/{{ book.id }}/cover" alt="Portada {{ book.title_ai|default:book.title_user }}">
-      </a>
-      <div class="book-meta">
-        <h3>{{ book.title_ai|default:book.title_user }}</h3>
-        <p class="author">{{ book.author_ai|default:book.author_user }}</p>
-        <p class="mini">{{ book.genre }} · {{ book.language }}</p>
-        <div class="tags">
-          {% for tag in book.tags_json %}
-            <span>{{ tag }}</span>
-          {% endfor %}
-        </div>
-      </div>
-    </article>
+  <a href="/books/{{ book.id }}"
+    class="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow border border-slate-100 flex flex-col">
+    <div class="aspect-[3/4] overflow-hidden bg-slate-100">
+      <img src="/books/{{ book.id }}/cover"
+        alt="{{ book.title_ai|default:book.title_user }}"
+        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+        onerror="this.onerror=null;this.src='/books/{{ book.id }}/cover?svg=1'">
+    </div>
+    <div class="p-3 flex flex-col flex-1">
+      <h3 class="font-semibold text-slate-900 text-sm leading-snug mb-1 line-clamp-2">
+        {{ book.title_ai|default:book.title_user }}
+      </h3>
+      <p class="text-slate-400 text-xs mb-2">{{ book.author_ai|default:book.author_user }}</p>
+      {% if book.genre %}
+        <span class="mt-auto inline-block text-xs text-brand-magenta font-medium">{{ book.genre }}</span>
+      {% endif %}
+    </div>
+  </a>
   {% empty %}
-    <p>No hay libros listos todavía.</p>
+  <div class="col-span-full py-20 text-center text-slate-400">
+    <p class="text-lg font-medium mb-1">No hay libros todavía</p>
+    <p class="text-sm"><a href="/upload" class="text-brand-magenta hover:underline">Sube el primero</a></p>
+  </div>
   {% endfor %}
-</section>
+</div>
+
 {% endblock %}

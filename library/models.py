@@ -19,6 +19,9 @@ class Book(models.Model):
     language = models.CharField(max_length=32, blank=True)
     summary = models.TextField(blank=True)
     tags_json = models.JSONField(default=list, blank=True)
+    published_date = models.CharField(max_length=20, blank=True)
+    page_count = models.PositiveIntegerField(null=True, blank=True)
+    publisher = models.CharField(max_length=255, blank=True)
 
     original_filename = models.CharField(max_length=255)
     normalized_filename = models.CharField(max_length=255, blank=True)
@@ -27,7 +30,10 @@ class Book(models.Model):
     sha256 = models.CharField(max_length=64, blank=True)
     file_blob = models.BinaryField()
     file_size = models.PositiveIntegerField(default=0)
+    alt_blob = models.BinaryField(null=True, blank=True)
+    alt_extension = models.CharField(max_length=16, blank=True)
     cover_blob = models.BinaryField(null=True, blank=True)
+    cover_url = models.URLField(max_length=500, blank=True)
 
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     scan_report = models.TextField(blank=True)
