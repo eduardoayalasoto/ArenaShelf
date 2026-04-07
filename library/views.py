@@ -1,8 +1,14 @@
+import re
+
+from django.conf import settings
 from django.contrib import messages
-from django.http import Http404, HttpResponse
+from django.core.mail import EmailMessage
+from django.http import Http404, HttpResponse, JsonResponse
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
+
+_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 from .forms import BookUploadForm
 from .models import Book, ProcessingJob

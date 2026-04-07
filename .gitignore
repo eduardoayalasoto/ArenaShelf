@@ -1,19 +1,16 @@
-# Claude Code
-.claude/
-
 # Python
 __pycache__/
 *.py[cod]
 *.pyo
-.env
-*.egg-info/
-dist/
-build/
 
 # Django
-*.sqlite3
+*.log
+db.sqlite3
 staticfiles/
-media/
+
+# Environment
+.env
+.env.*
 
 # OS
 .DS_Store
