@@ -182,3 +182,70 @@ class CoverView(View):
             book.author_ai or book.author_user,
         )
         return HttpResponse(data, content_type="image/svg+xml")
+
+
+def _send_email(recipient: str, subject: str, body: str, attachment_name: str, file_data: bytes, mime: str) -> None:
+    """Send an email with a file attachment via Resend (preferred) or SMTP."""
+    from_addr = settings.EMAIL_FROM
+
+    if settings.RESEND_API_KEY:
+        import base64
+        import resend  # type: ignore
+
+        resend.api_key = settings.RESEND_API_KEY
+        resend.Emails.send({
+            "from": from_addr or "ArenaShelf <onboarding@resend.dev>",
+            "to": [recipient],
+            "subject": subject,
+            "text": body,
+            "attachments": [{
+                "filename": attachment_name,
+                "content": base64.b64encode(file_data).decode(),
+            }],
+        })
+    else:
+        msg = EmailMessage(
+            subject=subject,
+            body=body,
+            from_email=from_addr or settings.EMAIL_HOST_USER,
+            to=[recipient],
+        )
+        msg.attach(attachment_name, file_data, mime)
+        msg.send(fail_silently=False)
+
+
+class EmailBookView(View):
+    def post(self, request, book_id: int):
+        if not settings.RESEND_API_KEY and not settings.EMAIL_HOST_USER:
+            return JsonResponse(
+                {"error": "El envío por correo no está configurado en el servidor."},
+                status=503,
+            )
+
+        book = get_object_or_404(Book, id=book_id)
+        if book.status != Book.Status.READY:
+            return JsonResponse({"error": "El libro aún no está listo."}, status=400)
+
+        recipient = request.POST.get("email", "").strip()
+        if not _EMAIL_RE.match(recipient):
+            return JsonResponse({"error": "Dirección de correo inválida."}, status=400)
+
+        if book.extension == ".epub":
+            file_data = bytes(book.file_blob)
+            mime = "application/epub+zip"
+            ext = ".epub"
+        else:
+            file_data = bytes(book.file_blob)
+            mime = book.mime_type or "application/octet-stream"
+            ext = book.extension or ""
+
+        title = book.title_ai or book.title_user
+        author = book.author_ai or book.author_user
+        attachment_name = f"{title} - {author}{ext}"
+        body = f"Hola,\n\nAquí está tu libro: {title} de {author}.\n\nEnviado desde ArenaShelf."
+
+        try:
+            _send_email(recipient, title, body, attachment_name, file_data, mime)
+            return JsonResponse({"ok": True})
+        except Exception as exc:
+            return JsonResponse({"error": f"Error al enviar: {exc}"}, status=500)
