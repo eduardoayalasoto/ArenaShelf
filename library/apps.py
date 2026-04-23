@@ -1,4 +1,13 @@
+import sys
+import threading
+
 from django.apps import AppConfig
+
+_SKIP_CMDS = {
+    "migrate", "makemigrations", "collectstatic", "test",
+    "shell", "run_library_worker", "check", "createsuperuser",
+    "dbshell", "showmigrations", "sqlmigrate",
+}
 
 
 class LibraryConfig(AppConfig):
@@ -14,3 +23,8 @@ class LibraryConfig(AppConfig):
                 connection.cursor().execute("PRAGMA synchronous=NORMAL;")
 
         connection_created.connect(_enable_wal)
+
+        if not any(arg in _SKIP_CMDS for arg in sys.argv):
+            from library.worker import run_worker_loop
+            t = threading.Thread(target=run_worker_loop, daemon=True, name="library-worker")
+            t.start()
